@@ -33,24 +33,26 @@ class Node:
     def __lt__(self, other):
         return self.freq < other.freq
 
-def compress_file(input_file_path, help_file_path, output_file_path, block_size):
-    with open(input_file_path, 'rb') as input_file, open(help_file_path, 'wb') as output_file:
+# надо проверить для блоков!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+def compress_file(input_file_path, output_file_path, block_size):
+    with open(input_file_path, 'rb') as input_file, open(output_file_path, 'wb') as output_file:
+        arr = []
         while True:
             data = input_file.read(block_size)
             if not data:
                 break
             last_column_bwt, s_index = bwt_compress(data)
-            output_file.write(s_index.to_bytes(2, 'big'))
+            arr.append(s_index)
             mtf_data = mtf_compress(last_column_bwt)
 
             code_block = rle_compress(mtf_data)
 
             for count, symbol in code_block:
-                write_variable_length_integer(output_file, count)
-                output_file.write(bytes([symbol]))
-    with open(help_file_path, 'rb') as input_file, open(output_file_path, 'wb') as output_file:
-        data = input_file.read()
-        arch = ha_compress(data)
+                arr += write_variable_length_integer(count)
+                arr += bytes([symbol])
+
+        arch = ha_compress(arr)
         output_file.write(bytes(arch))
 
 def bwt_compress(S):
@@ -67,6 +69,7 @@ def bwt_compress(S):
                 return 1
         return 0
 
+
     indices.sort(key=cmp_to_key(compare_cyclic_shifts))
 
     last_column_bwt = bytes([S[indices[i]-1] if indices[i] > 0 else S[-1] for i in range(n)])
@@ -82,11 +85,13 @@ def mtf_compress(string):
         T = [T[i]] + T[:i] + T[i+1:]
     return rezult
 
-def write_variable_length_integer(file, value):
+def write_variable_length_integer(value):
+    s = []
     while value > 127:
-        file.write(bytes([(value & 127) | 128]))
+        s += (bytes([(value & 127) | 128]))
         value >>= 7
-    file.write(bytes([value]))
+    s += (bytes([value]))
+    return s
 
 def rle_compress(data):
     count = 1
@@ -205,29 +210,25 @@ def compress(data, codes):
 
 
 
-def decompress_file(input_file_path, output_file_path):
+def decompress_file(input_file_path, output_file_path, block_size):
     with open(input_file_path, 'rb') as input_file, open(output_file_path, 'wb') as output_file:
-        compressed_data = input_file.read()
-        decompressed_ha_data = ha_decompress(compressed_data)
+        data = input_file.read()
+        ha_data = ha_decompress(data)
 
-        i = 0
-        while i < len(decompressed_ha_data):
-            s_index = int.from_bytes(decompressed_ha_data[i:i+2], 'big')
-            i += 2
+        index = 0
+        while index < len(ha_data):
+            s_index = ha_data[index]
+            index += 1
 
-            rle_data = []
-            while i < len(decompressed_ha_data):
-                count, bytes_read = read_variable_length_integer(decompressed_ha_data[i:])
-                i += bytes_read
-                if count == 0:
-                    break
-                symbol = decompressed_ha_data[i]
-                i += 1
-                rle_data.append((count, symbol))
+            if index + block_size * 2 < len(ha_data):
+                arr = ha_data[index: index + block_size * 2]
+            else: arr = ha_data[index:]
 
-            decompressed_rle_block = rle_decompress(rle_data)
-            decompressed_mtf_data = mtf_decompress(decompressed_rle_block)
-            original_block = bwt_decompress(decompressed_mtf_data, s_index)
+            index += block_size * 2
+
+            rle_data = rle_decompress(arr)
+            last_column_bwt = mtf_decompress(rle_data)
+            original_block = bwt_decompress(last_column_bwt, s_index)
             output_file.write(original_block)
 
 def ha_decompress(arch):
@@ -290,23 +291,13 @@ def decompress(arch, start_index, data_length, root):
 
     return bytes(data)
 
-def read_variable_length_integer(data):
-    value = 0
-    shift = 0
-    bytes_read = 0
-    for byte in data:
-        value |= (byte & 0x7F) << shift
-        bytes_read += 1
-        if byte & 0x80 == 0:
-            break
-        shift += 7
-    return value, bytes_read
-
 def rle_decompress(data):
-    result = []
-    for count, symbol in data:
-        result.extend([symbol] * count)
-    return result
+    arr = []
+    for i in range(0, len(data), 2):
+        for _ in range(data[i]):
+            arr.append(data[i + 1])
+    return arr
+
 
 def mtf_decompress(L):
     rezult = []
@@ -341,20 +332,17 @@ def counting_sort_arg(S):
         T_sub[S[i]] += 1
     return T
 
-
-
 if __name__ == "__main__":
-    input_file = 'input.pmd'
-    compressed_file = 'compressed.bwt_mtf_rle_ha'
-    help_file = 'help.bwt_mtf_rle_ha'
-    decompressed_file = 'decompressed.txt'
-    block_size = 64
+    input_file = 'color.raw'
+    compressed_file = 'compressed.bwt_mtf'
+    decompressed_file = 'decompressed'
+    block_size = 256
 
 
-    compress_file(input_file, help_file, compressed_file, block_size)
+    compress_file(input_file, compressed_file, block_size)
     print(f"Файл '{input_file}' сжат в '{compressed_file}'.")
 
-    # decompress_file(compressed_file, decompressed_file)
+    # decompress_file(compressed_file, decompressed_file, block_size)
     # print(f"Файл '{compressed_file}' восстановлен в '{decompressed_file}'.")
     #
     #
@@ -365,10 +353,8 @@ if __name__ == "__main__":
     # def files_are_identical(file1, file2):
     #     return filecmp.cmp(file1, file2, shallow=False)
     #
-    #
-    # # Пример использования
     # file1 = 'input.txt'
-    # file2 = 'decompressed.txt'
+    # file2 = 'decompressed'
     #
     # if files_are_identical(file1, file2):
     #     print("Файлы идентичны.")

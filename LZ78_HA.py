@@ -273,10 +273,10 @@ def lz78_decompress(input_file_path, output_file_path):
 
 
 if __name__ == "__main__":
-    input_file = 'input.pmd'
+    input_file = 'russian_text.txt'
     compressed_file = 'compressed.lz78_ha'
     help_file = 'help.lz78_ha'
-    decompressed_file = 'decompressed.txt'
+    decompressed_file = 'decompressed'
 
     compress_file(input_file, help_file, compressed_file)
     print(f"Файл '{input_file}' сжат в '{compressed_file}'.")
@@ -294,8 +294,8 @@ if __name__ == "__main__":
     #
     #
     # # Пример использования
-    # file1 = 'input.txt'
-    # file2 = 'decompressed.txt'
+    # file1 = 'russian_text.txt'
+    # file2 = 'decompressed'
     #
     # if files_are_identical(file1, file2):
     #     print("Файлы идентичны.")

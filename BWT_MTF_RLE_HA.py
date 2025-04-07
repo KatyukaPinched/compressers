@@ -33,8 +33,6 @@ class Node:
     def __lt__(self, other):
         return self.freq < other.freq
 
-# надо проверить для блоков!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
 def compress_file(input_file_path, output_file_path, block_size):
     with open(input_file_path, 'rb') as input_file, open(output_file_path, 'wb') as output_file:
         arr = []
@@ -48,9 +46,13 @@ def compress_file(input_file_path, output_file_path, block_size):
 
             code_block = rle_compress(mtf_data)
 
-            for count, symbol in code_block:
+            for flag, count, symbol in code_block:
+                arr += bytes([flag])
                 arr += write_variable_length_integer(count)
-                arr += bytes([symbol])
+                if flag == 1:
+                    arr += bytes([symbol])
+                else:
+                    arr += symbol
 
         arch = ha_compress(arr)
         output_file.write(bytes(arch))
@@ -94,18 +96,23 @@ def write_variable_length_integer(value):
     return s
 
 def rle_compress(data):
-    count = 1
     result = []
+    i = 0
 
-    for i in range(len(data)):
-        if i + 1 == len(data):
-            result.append((count, data[i]))
-            continue
-        elif data[i] == data[i + 1]:
-            count += 1
-        else:
-            result.append((count, data[i]))
+    while i < len(data):
+        if i + 1 < len(data) and data[i] == data[i + 1]:
             count = 1
+            while i + 1 < len(data) and data[i] == data[i + 1]:
+                count += 1
+                i += 1
+            result.append((1, count, data[i]))
+            i += 1
+        else:
+            j = i
+            while j < len(data) and (j == i or (j + 1 < len(data) and data[j] != data[j + 1])):
+                j += 1
+            result.append((0, j - i, data[i:j]))
+            i = j
 
     return result
 
@@ -220,16 +227,19 @@ def decompress_file(input_file_path, output_file_path, block_size):
             s_index = ha_data[index]
             index += 1
 
-            if index + block_size * 2 < len(ha_data):
-                arr = ha_data[index: index + block_size * 2]
-            else: arr = ha_data[index:]
+            remaining_data_length = len(ha_data) - index
+            current_block_size = min(block_size * 2, remaining_data_length)
 
-            index += block_size * 2
+            if current_block_size > 0:
+                arr = ha_data[index: index + current_block_size]
+                index += current_block_size
 
-            rle_data = rle_decompress(arr)
-            last_column_bwt = mtf_decompress(rle_data)
-            original_block = bwt_decompress(last_column_bwt, s_index)
-            output_file.write(original_block)
+                rle_data = rle_decompress(arr)
+                last_column_bwt = mtf_decompress(rle_data)
+                original_block = bwt_decompress(last_column_bwt, s_index)
+                output_file.write(original_block)
+            else:
+                break
 
 def ha_decompress(arch):
     data_length, start_index, freqs = parse_header(arch)
@@ -291,13 +301,32 @@ def decompress(arch, start_index, data_length, root):
 
     return bytes(data)
 
-def rle_decompress(data):
-    arr = []
-    for i in range(0, len(data), 2):
-        for _ in range(data[i]):
-            arr.append(data[i + 1])
-    return arr
-
+def rle_decompress(compressed_data):
+    decompressed_data = bytearray()
+    i = 0
+    while i < len(compressed_data):
+        try:
+            flag = compressed_data[i]
+            i += 1
+            count = 0
+            shift = 0
+            while True:
+                byte = compressed_data[i]
+                i += 1
+                count |= (byte & 127) << shift
+                shift += 7
+                if byte & 128 == 0:
+                    break
+            if flag == 1:
+                symbol = compressed_data[i]
+                i += 1
+                decompressed_data.extend(bytes([symbol]) * count)
+            else:
+                decompressed_data.extend(compressed_data[i:i + count])
+                i += count
+        except IndexError:
+            break
+    return bytes(decompressed_data)
 
 def mtf_decompress(L):
     rezult = []
@@ -333,7 +362,7 @@ def counting_sort_arg(S):
     return T
 
 if __name__ == "__main__":
-    input_file = 'color.raw'
+    input_file = 'black_white.raw'
     compressed_file = 'compressed.bwt_mtf'
     decompressed_file = 'decompressed'
     block_size = 256
@@ -353,7 +382,7 @@ if __name__ == "__main__":
     # def files_are_identical(file1, file2):
     #     return filecmp.cmp(file1, file2, shallow=False)
     #
-    # file1 = 'input.txt'
+    # file1 = 'idea64.exe'
     # file2 = 'decompressed'
     #
     # if files_are_identical(file1, file2):

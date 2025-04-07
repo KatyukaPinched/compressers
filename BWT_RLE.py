@@ -10,9 +10,13 @@ def compress_file(input_file_path, output_file_path, block_size):
             code_block = rle_compress(last_column_bwt)
 
             output_file.write(s_index.to_bytes(4, byteorder='little'))
-            for count, symbol in code_block:
+            for flag, count, symbol in code_block:
+                output_file.write(bytes([flag]))
                 write_variable_length_integer(output_file, count)
-                output_file.write(bytes([symbol]))
+                if flag == 1:
+                    output_file.write(bytes([symbol]))
+                else:
+                    output_file.write(symbol)
 
 def write_variable_length_integer(file, value):
     while value > 127:
@@ -34,27 +38,29 @@ def bwt_compress(S):
                 return 1
         return 0
 
-
     indices.sort(key=cmp_to_key(compare_cyclic_shifts))
-
-
     last_column_bwt = bytes([S[indices[i]-1] if indices[i] > 0 else S[-1] for i in range(n)])
     s_index = indices.index(0)
     return last_column_bwt, s_index
 
 def rle_compress(data):
-    count = 1
     result = []
+    i = 0
 
-    for i in range(len(data)):
-        if i + 1 == len(data):
-            result.append((count, data[i]))
-            continue
-        elif data[i] == data[i + 1]:
-            count += 1
-        else:
-            result.append((count, data[i]))
+    while i < len(data):
+        if i + 1 < len(data) and data[i] == data[i + 1]:
             count = 1
+            while i + 1 < len(data) and data[i] == data[i + 1]:
+                count += 1
+                i += 1
+            result.append((1, count, data[i]))
+            i += 1
+        else:
+            j = i
+            while j < len(data) and (j == i or (j + 1 < len(data) and data[j] != data[j + 1])):
+                j += 1
+            result.append((0, j - i, data[i:j]))
+            i = j
 
     return result
 
@@ -66,50 +72,61 @@ def decompress_file(input_file_path, output_file_path, block_size):
             s_index_bytes = input_file.read(4)
             if not s_index_bytes:
                 break
-
             s_index = int.from_bytes(s_index_bytes, byteorder='little')
             decompressed_block = bytearray()
             bytes_read = 0
-
             while bytes_read < block_size:
-                count, symbol, bytes_consumed = rle_decompress(input_file)
-
+                flag = input_file.read(1)
+                if not flag:
+                    decompressed_block = bwt_decompress(decompressed_block, s_index)
+                    output_file.write(decompressed_block)
+                    return
+                flag = flag[0]
+                count = read_variable_length_integer(input_file)
                 if count is None:
                     decompressed_block = bwt_decompress(decompressed_block, s_index)
                     output_file.write(decompressed_block)
                     return
 
-                decompressed_block.extend([symbol] * count)
-                bytes_read += count
+                if flag == 1:
+                    symbol_bytes = input_file.read(1)
+                    if not symbol_bytes:
+                        decompressed_block = bwt_decompress(decompressed_block, s_index)
+                        output_file.write(decompressed_block)
+                        return
+                    symbol = symbol_bytes[0]
+                    decompressed_block.extend([symbol] * count)
+                    bytes_read += count
+                else:
+                    string_bytes = input_file.read(count)
+                    if not string_bytes or len(string_bytes) != count:
+                        decompressed_block = bwt_decompress(decompressed_block, s_index)
+                        output_file.write(decompressed_block)
+                        return
+                    decompressed_block.extend(string_bytes)
+                    bytes_read += count
 
                 if bytes_read > block_size:
+                    excess_bytes = bytes_read - block_size
+                    decompressed_block = decompressed_block[:-excess_bytes]
+                    input_file.seek(input_file.tell() - excess_bytes)
                     break
-
             decompressed_block = bwt_decompress(decompressed_block, s_index)
             output_file.write(decompressed_block)
 
-def rle_decompress(input_file):
-    count = 0
+def read_variable_length_integer(file):
+    value = 0
     shift = 0
-    count_bytes = 0
     while True:
-        byte = input_file.read(1)
+        byte = file.read(1)
         if not byte:
-            return None, None, None
-
+            return None
         byte = byte[0]
-        count |= (byte & 127) << shift
-        count_bytes += 1
+        value |= (byte & 127) << shift
+        shift += 7
         if byte & 128 == 0:
             break
-        shift += 7
-
-    symbol = input_file.read(1)
-    if not symbol:
-        return None, None, None
-    symbol = symbol[0]
-
-    return count, symbol, count_bytes + 1
+    return value
 
 def bwt_decompress(last_column_BWM, S_index):
     N = len(last_column_BWM)
@@ -139,10 +156,10 @@ def counting_sort_arg(S):
 
 
 if __name__ == "__main__":
-    input_file = 'input.raw'
+    input_file = 'russian_text.txt'
     compressed_file = 'compressed.bwt_pmd'
-    decompressed_file = 'decompressed.raw'
-    block_size = 64
+    decompressed_file = 'decompressed'
+    block_size = 4096
 
     compress_file(input_file, compressed_file, block_size)
     print(f"Файл '{input_file}' сжат в '{compressed_file}'.")
@@ -158,8 +175,8 @@ if __name__ == "__main__":
     def files_are_identical(file1, file2):
         return filecmp.cmp(file1, file2, shallow=False)
 
-    file1 = 'input.raw'
-    file2 = 'decompressed.raw'
+    file1 = 'russian_text.txt'
+    file2 = 'decompressed'
 
     if files_are_identical(file1, file2):
         print("Файлы идентичны.")

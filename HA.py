@@ -212,9 +212,9 @@ def decompress(arch, start_index, data_length, root):
 
 
 if __name__ == "__main__":
-    input_file = 'input.pmd'
+    input_file = 'russian_text.txt'
     compressed_file = 'compressed.huf'
-    decompressed_file = 'decompressed.pmd'
+    decompressed_file = 'decompressed'
 
     ha_compress_file(input_file, compressed_file)
     print(f"Файл '{input_file}' сжат в '{compressed_file}'.")
@@ -230,8 +230,8 @@ if __name__ == "__main__":
     def files_are_identical(file1, file2):
         return filecmp.cmp(file1, file2, shallow=False)
 
-    file1 = 'input.pmd'
-    file2 = 'decompressed.pmd'
+    file1 = 'russian_text.txt'
+    file2 = 'decompressed'
 
     if files_are_identical(file1, file2):
         print("Файлы идентичны.")

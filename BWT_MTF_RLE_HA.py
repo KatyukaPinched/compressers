@@ -362,7 +362,7 @@ def counting_sort_arg(S):
     return T
 
 if __name__ == "__main__":
-    input_file = 'black_white.raw'
+    input_file = 'russian_text.txt'
     compressed_file = 'compressed.bwt_mtf'
     decompressed_file = 'decompressed'
     block_size = 256
@@ -382,7 +382,7 @@ if __name__ == "__main__":
     # def files_are_identical(file1, file2):
     #     return filecmp.cmp(file1, file2, shallow=False)
     #
-    # file1 = 'idea64.exe'
+    # file1 = 'russian_text.txt'
     # file2 = 'decompressed'
     #
     # if files_are_identical(file1, file2):
